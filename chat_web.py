@@ -83,7 +83,6 @@ def generate_chat_stream(model_name, messages):
                 text_chunk = json_data.get("message", {}).get("content", "")
                 assistant_response += text_chunk # add the text_chunk to all response
                 sys.stdout.write(text_chunk)
-                text_chunk = text_chunk.replace('\n', '<br>')
                 sys.stdout.flush()
                 yield f"data: {json.dumps({'response': text_chunk})}\n\n"
                 if json_data.get('done', False):

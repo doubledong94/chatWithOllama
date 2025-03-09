@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <meta charset="UTF-8">
     <title>Chat with Ollama</title>
     <style>
@@ -54,11 +55,9 @@
         }
         .user {
             color: blue;
-            font-weight: bold;
         }
         .assistant {
             color: green;
-            font-weight: bold;
         }
         .role-prefix {
             display: inline-block;
@@ -89,6 +88,12 @@
         button {
             padding: 8px 12px;
             border: 1px solid #ccc;
+        }
+
+        .markdown-checkbox {
+            display: flex;
+            align-items: center;
+            gap:5px;
         }
         h1{
             margin:20px 0;
@@ -154,6 +159,10 @@
     <script>
         //default model_name
         let currentModel = "qwq:32b";
+
+        //default markdown state
+        let enableMarkdown = false;
+
 
         //fetch models info from backend
         function fetchModels() {
@@ -254,7 +263,11 @@
 
                                     const data = JSON.parse(lines[i].substring(5));
                                     if(data.response){
-                                        responseText += data.response;
+                                        if (enableMarkdown) {
+                                            responseText += data.response;
+                                        } else {
+                                            responseText += data.response.replace(/\n/g, "<br>");
+                                        }
 
                                     }else if(data.end){
                                         // do nothing
@@ -264,11 +277,16 @@
 
                             // if have last message div and the role is assistant, modify last div
                             if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
-                                //Use innerHTML to replace the text with new message and let the browser render the html tag.
-                                lastMessageDiv.innerHTML = responseText;
+                                if(enableMarkdown){
+                                    //Use innerHTML to replace the text with new message and let the browser render the html tag.
+                                    // Convert markdown to HTML
+                                    lastMessageDiv.innerHTML = marked.parse(responseText);
+                                }else {
+                                    lastMessageDiv.innerHTML = responseText;
+                                    // Tell MathJax to re-typeset the content
+                                    MathJax.typesetPromise([lastMessageDiv]);
+                                }
                                 chatbox.scrollTop = chatbox.scrollHeight;
-                                // Tell MathJax to re-typeset the content
-                                MathJax.typesetPromise([lastMessageDiv]);
                             }
                         }
                         read();
@@ -350,6 +368,24 @@
                 sendMessage();
             }
         });
+        //add a markdown check box
+        function createMarkdownCheckbox(){
+            const inputArea = document.querySelector('.input-area');
+            const checkboxDiv = document.createElement('div');
+            checkboxDiv.classList.add('markdown-checkbox');
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = 'markdown-checkbox';
+            checkbox.onchange = function(){ enableMarkdown = this.checked; }
+
+            const label = document.createElement('label');
+            label.textContent = 'Markdown';
+            label.htmlFor = 'markdown-checkbox';
+            checkboxDiv.append(checkbox,label);
+            inputArea.append(checkboxDiv);
+        }
+        createMarkdownCheckbox();
     </script>
 </body>
 </html>
