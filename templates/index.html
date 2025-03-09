@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat with Ollama</title>
+    <style>
+        /* ... (Your existing CSS styles) ... */
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        .main-container {
+            display: flex;
+            width: 95%;
+            max-width: 1200px; /* Increase max-width for better layout */
+            margin: 20px auto; /* Center the main container */
+            flex-grow:1;
+        }
+
+        #model-list {
+            width: 20%; /* Fixed width for model list */
+            max-width:200px;
+            min-width:150px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-right: 20px; /* Space between model list and chat */
+            overflow-y:auto;
+            flex-shrink: 0;
+            height:auto;
+        }
+
+        #chat-area {
+            width: 80%; /* Take remaining space for chat area */
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1; /* Allow chat area to grow */
+        }
+
+        #chatbox {
+            width: 100%; /* Fill width of chat area */
+            height: 400px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+            flex-grow: 1;
+        }
+        .message {
+            margin-bottom: 10px;
+            word-wrap: break-word; /*ensure the long word break */
+        }
+        .user {
+            color: blue;
+            font-weight: bold;
+        }
+        .assistant {
+            color: green;
+            font-weight: bold;
+        }
+        .role-prefix {
+            display: inline-block;
+            min-width: 80px; /* Adjust as needed */
+        }
+        think {
+            color: gray;
+        }
+
+        /* Style for the input area */
+        .input-area {
+            width: 100%; /* Fill width of chat area */
+            display: flex;
+            margin-bottom: 20px;
+            gap:5px;
+        }
+        #message {
+            display:flex;
+            flex-direction:row;
+            flex-grow: 1; /* Allow input to take up available space */
+            padding: 8px;
+            border: 1px solid #ccc;
+        }
+        button {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+        }
+        h1{
+            margin:20px 0;
+            text-align: center;
+        }
+
+        /* Style for the model list */
+        #model-list ul{
+          padding:0;
+        }
+        #model-list li{
+            list-style:none;
+            padding-left:10px;
+            border-bottom: 1px solid #eee; /* Add thin line between list items */
+        }
+        #model-list li:last-child {
+          border-bottom: none; /* Remove border-bottom for the last item */
+        }
+        /* Selected model style */
+        #model-list li.selected {
+            background-color: #a0a0a0; /* Light gray background */
+        }
+
+        /* Add a line after the assistant's response */
+        .message.assistant {
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+
+    </style>
+    <script>
+        MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']]
+          },
+          svg: {
+            fontCache: 'global'
+          }
+        };
+        </script>
+    <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+</head>
+<body>
+    <div class="main-container">
+        <div id="model-list">
+            <h2>Models:</h2>
+            <ul id="models">
+                <!-- Models will be listed here -->
+            </ul>
+        </div>
+        <div id="chat-area">
+            <div id="chatbox">
+            </div>
+            <div class="input-area">
+                <input type="text" id="message" placeholder="Enter your message" >
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        //default model_name
+        let currentModel = "qwq:32b";
+
+        //fetch models info from backend
+        function fetchModels() {
+            fetch('/models', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(models => {
+                    const modelList = document.getElementById('models');
+                    modelList.innerHTML = ''; // Clear existing models
+                    models.forEach(model => {
+                        const li = document.createElement('li');
+                        li.textContent = model;
+                        li.style.cursor = "pointer"; // Add hand cursor
+                        li.onclick = function() {
+                            selectModel(model);
+                        };
+                        if (model === currentModel) {
+                            li.classList.add('selected');
+                        }
+                        modelList.appendChild(li);
+                    });
+                })
+                .catch(error => console.error('Error fetching models:', error));
+        }
+
+        const chatbox = document.getElementById('chatbox');
+        const messageInput = document.getElementById('message');
+        let lastRole = null; // Keep track of the last role
+        let lastMessageDiv = null; // Keep track of the last message div
+
+        function appendMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.classList.add(role);
+
+            //create the role prefix
+            const rolePrefix = document.createElement("span");
+            rolePrefix.classList.add("role-prefix");
+            rolePrefix.textContent = `${role}: `;
+            messageDiv.appendChild(rolePrefix);
+            lastRole = role;
+            const contentSpan = document.createElement('span');
+            // Use innerHTML here if you are expecting any HTML in the content
+            contentSpan.innerHTML = content;
+            messageDiv.appendChild(contentSpan);
+
+            //store the last div
+            lastMessageDiv = contentSpan;
+
+            //append to chatbox
+            chatbox.appendChild(messageDiv);
+            chatbox.scrollTop = chatbox.scrollHeight; // Scroll to bottom
+        }
+
+        function sendMessage() {
+                const message = messageInput.value;
+                if (message.trim() === '') return;
+                appendMessage('user', message);
+                messageInput.value = '';
+                sendMessageToBackend(message);
+        }
+        function sendMessageToBackend(message){
+            fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                })
+                .then(response => {
+                    // Check if response is successful before handling it as json
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.body;
+                })
+                .then(body=>{
+                    const reader = body.getReader();
+                    const decoder = new TextDecoder();
+                    let responseText = "";
+                    //before read, create the assistant message
+                    appendMessage('assistant',"")
+                    function read() {
+                        reader.read().then(({ done, value }) => {
+                        if (done) {
+                            console.log("Stream complete");
+                            return;
+                        }
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        for(let i=0; i<lines.length; i++){
+                            if(lines[i]){
+                                if(lines[i].startsWith("data: ")){
+
+                                    const data = JSON.parse(lines[i].substring(5));
+                                    if(data.response){
+                                        responseText += data.response;
+
+                                    }else if(data.end){
+                                        // do nothing
+                                    }
+                                }
+                            }
+
+                            // if have last message div and the role is assistant, modify last div
+                            if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
+                                //Use innerHTML to replace the text with new message and let the browser render the html tag.
+                                lastMessageDiv.innerHTML = responseText;
+                                chatbox.scrollTop = chatbox.scrollHeight;
+                                // Tell MathJax to re-typeset the content
+                                MathJax.typesetPromise([lastMessageDiv]);
+                            }
+                        }
+                        read();
+                        })
+                    }
+                    read();
+                })
+                 .catch(error => {
+                    console.error('Fetch error:', error);
+                    appendMessage('assistant', 'Error: fetch error');
+                });
+        }
+
+         function resetChat() {
+            fetch('/reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                chatbox.innerHTML = ''; // Clear chatbox
+                lastRole = null;
+                 lastMessageDiv = null;
+            })
+            .catch(error => console.error('Error:', error));
+        }
+        //reset chat when web page reload
+        window.onload = function() {
+            resetChat();
+            fetchModels();
+        };
+
+        function sendModelToServer(model) {
+            fetch('/select_model', {  // New endpoint
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ model: model })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+            })
+            .catch(error => console.error('Error sending model to server:', error));
+        }
+
+        // Select model function
+         function selectModel(model) {
+            currentModel = model;
+            sendModelToServer(model);
+
+            //remove the style of the last select model
+            const listItems = document.querySelectorAll('#model-list li');
+            listItems.forEach(item => {
+                item.classList.remove('selected');
+            });
+
+            // add the selected style to the current select model
+            const selectedItem = document.querySelector(`#model-list li:nth-child(${Array.from(listItems).findIndex(item => item.textContent === model)+1})`);
+            selectedItem.classList.add('selected');
+
+            //add message to chatbox to show which model you select
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            messageDiv.innerHTML = `Now you select model: <strong>${model}</strong>`;
+            chatbox.appendChild(messageDiv);
+
+            resetChat();
+        }
+
+        // Handle Enter key press in the input field
+        messageInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent form submission
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
