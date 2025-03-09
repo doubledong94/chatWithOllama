@@ -158,7 +158,12 @@
 
     <script>
         //default model_name
-        let currentModel = "qwq:32b";
+        let currentModel = localStorage.getItem("currentModel") || "qwq:32b";
+
+        // Save the current model to localStorage
+        function saveCurrentModel(model) {
+            localStorage.setItem("currentModel", model);
+        }
 
         //default markdown state
         let enableMarkdown = false;
@@ -263,12 +268,7 @@
 
                                     const data = JSON.parse(lines[i].substring(5));
                                     if(data.response){
-                                        if (enableMarkdown) {
-                                            responseText += data.response;
-                                        } else {
-                                            responseText += data.response.replace(/\n/g, "<br>");
-                                        }
-
+                                        responseText += data.response;
                                     }else if(data.end){
                                         // do nothing
                                     }
@@ -277,15 +277,9 @@
 
                             // if have last message div and the role is assistant, modify last div
                             if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
-                                if(enableMarkdown){
-                                    //Use innerHTML to replace the text with new message and let the browser render the html tag.
-                                    // Convert markdown to HTML
-                                    lastMessageDiv.innerHTML = marked.parse(responseText);
-                                }else {
-                                    lastMessageDiv.innerHTML = responseText;
-                                    // Tell MathJax to re-typeset the content
-                                    MathJax.typesetPromise([lastMessageDiv]);
-                                }
+                                lastMessageDiv.innerHTML = responseText;
+                                MathJax.typesetPromise([lastMessageDiv]);
+                                lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
                                 chatbox.scrollTop = chatbox.scrollHeight;
                             }
                         }
@@ -340,6 +334,7 @@
         // Select model function
          function selectModel(model) {
             currentModel = model;
+            saveCurrentModel(model);
             sendModelToServer(model);
 
             //remove the style of the last select model
@@ -385,7 +380,7 @@
             checkboxDiv.append(checkbox,label);
             inputArea.append(checkboxDiv);
         }
-        createMarkdownCheckbox();
+        // createMarkdownCheckbox();
     </script>
 </body>
 </html>
