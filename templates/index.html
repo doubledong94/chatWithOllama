@@ -76,11 +76,15 @@
             gap:5px;
         }
         #message {
-            display:flex;
-            flex-direction:row;
+            /*display:flex;*/
+            /*flex-direction:row;*/
             flex-grow: 1; /* Allow input to take up available space */
             padding: 8px;
             border: 1px solid #ccc;
+            min-height: 40px; /* Ensure a minimum height */
+            resize: vertical; /* Allow vertical resizing by the user */
+            overflow-y:auto;
+            font-size: 30px; /* Increase the font size */
         }
         button {
             padding: 8px 12px;
