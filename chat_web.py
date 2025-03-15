@@ -259,6 +259,53 @@ def get_current_model():
     global MODEL_NAME
     return jsonify({"current_model": MODEL_NAME})
 
+@app.route("/chat_history_list", methods=["GET"])
+def chat_history_list():
+    """Returns a list of available chat history files."""
+    history_files = []
+    for filename in os.listdir(CHAT_HISTORY_DIR):
+        if filename.endswith(".txt"):
+            history_files.append(filename)
+    history_files.sort()
+    return jsonify(history_files)
+
+@app.route("/load_chat_history", methods=["POST"])
+def load_chat_history():
+    """Loads a specific chat history file and updates the current conversation."""
+    global conversation_history
+    try:
+        data = request.get_json()
+        filename = data.get("filename")
+        filepath = os.path.join(CHAT_HISTORY_DIR, filename)
+
+        if not os.path.exists(filepath):
+            return jsonify({"error": "File not found"}), 404
+
+        conversation_history = []  # Clear current history
+        with open(filepath, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                if line.startswith("user: "):
+                    content = line[6:]
+                    conversation_history.append({"role": "user", "content": content.strip()})
+                    i += 1
+                elif line.startswith("assistant: "):
+                    content = ""
+                    while i < len(lines) and not lines[i].startswith('---------------------------------------------------------------------------------------'):
+                        content+= lines[i]
+                        i += 1
+                    conversation_history.append({"role": "assistant", "content": content[11:].strip()})
+                    i += 2  # Skip separator and empty lines
+
+                else:
+                    i += 1
+        return jsonify({"message": "Chat history loaded", "history": conversation_history})
+
+    except Exception as e:
+        print(f"Error loading chat history: {e}")
+        return jsonify({"error": "An error occurred while loading history"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

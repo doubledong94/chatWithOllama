@@ -29,7 +29,7 @@
             padding: 10px;
             margin-right: 20px; /* Space between model list and chat */
             overflow-y:auto;
-            flex-shrink: 0;
+            flex-shrink: 1;
             height:auto;
         }
 
@@ -40,6 +40,16 @@
             flex-grow: 1; /* Allow chat area to grow */
         }
 
+        #history-list-container{
+            width:100%;
+            height:auto;
+            max-height:400px;
+            overflow-y: auto;
+            border:1px solid #ccc;
+            margin-bottom:10px;
+            padding:10px;
+            display:none;
+        }
         #chatbox {
             width: 100%; /* Fill width of chat area */
             height: 400px;
@@ -116,6 +126,14 @@
         #model-list li.selected {
             background-color: #a0a0a0; /* Light gray background */
         }
+        /* Style for the history list */
+        #history-list ul{
+          padding:0;
+        }
+        #history-list li{
+            list-style:none;
+            border-bottom: 1px solid #eee; /* Add thin line between list items */
+        }
 
         /* Add a line after the assistant's response */
         .message.assistant {
@@ -147,6 +165,11 @@
             </ul>
         </div>
         <div id="chat-area">
+            <div id="history-list-container">
+                <h2>History</h2>
+                <ul id="history-list">
+                </ul>
+            </div>
             <div id="chatbox">
             </div>
             <div class="input-area">
@@ -166,6 +189,12 @@
 
 
         //fetch models info from backend
+        function showHistoryList(){
+            const historyListContainer = document.getElementById('history-list-container');
+            historyListContainer.style.display = 'block';
+            getHistoryList()
+        }
+
         function fetchModels() {
             fetch('/models', {
                     method: 'GET',
@@ -222,7 +251,7 @@
             lastRole = role;
             const contentSpan = document.createElement('span');
             // Use innerHTML here if you are expecting any HTML in the content
-            contentSpan.innerHTML = content;
+            contentSpan.textContent = content;
             messageDiv.appendChild(contentSpan);
 
             //store the last div
@@ -369,10 +398,65 @@
             .catch(error => console.error('Error:', error));
         }
         //reset chat when web page reload
-        window.onload = function() {
-            loadConversation();
-            fetchModels();
-        };
+         window.onload = function() {
+             loadConversation();
+             fetchModels();
+         };
+
+         function getHistoryList(){
+             const historyList = document.getElementById('history-list');
+             historyList.innerHTML = '';
+             fetch('/chat_history_list', {
+                 method: 'GET',
+                 headers: {
+                     'Content-Type': 'application/json'
+                 }
+             }).then(response => {
+                 if (!response.ok) {
+                     throw new Error('Network response was not ok');
+                 }
+                 return response.json();
+             }).then(historyFiles=>{
+                 historyFiles.forEach(filename => {
+                     const li = document.createElement('li');
+                     li.textContent = filename;
+                     li.style.cursor = "pointer";
+                     li.onclick = function() {
+                         loadHistory(filename);
+                     };
+                     historyList.appendChild(li);
+                 });
+             })
+         }
+         function loadHistory(filename){
+             fetch('/load_chat_history', {
+                 method: 'POST',
+                 headers: {
+                     'Content-Type': 'application/json'
+                 },
+                 body: JSON.stringify({ filename: filename })
+             })
+             .then(response => {
+                 if (!response.ok) {
+                     throw new Error('Network response was not ok');
+                 }
+                 return response.json();
+             })
+             .then(data => {
+                 chatbox.innerHTML = '';
+                 lastRole = null;
+                 lastMessageDiv = null;
+                 data.history.forEach(item=>{
+                     appendMessage(item.role,item.content);
+                     if(item.role === 'assistant') {
+                        MathJax.typesetPromise([lastMessageDiv]).then(() => {
+                            lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                        });
+                     }
+                 });
+             })
+             .catch(error => console.error('Error:', error));
+         }
 
         function sendModelToServer(model) {
             fetch('/select_model', {  // New endpoint
@@ -457,6 +541,8 @@
             inputArea.append(checkboxDiv);
         }
         // createMarkdownCheckbox();
+        // show history list
+        showHistoryList();
     </script>
 </body>
 </html>
