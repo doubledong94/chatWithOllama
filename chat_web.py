@@ -2,6 +2,10 @@ from flask import Flask, render_template, request, jsonify, Response, redirect, 
 from call_ollama import print_user_message, print_assistant_message
 import warnings
 import json, sys
+import threading
+import requests
+import datetime
+import os
 
 # Suppress UserWarnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -15,6 +19,45 @@ MODEL_NAME = "qwq:32b"  # Default model name, you can change it here
 MODEL_LIST = []
 
 PASSWORD = "ydd94"  # Set the password here
+
+# Global variable to control stream termination
+stream_active = False
+stream_stop_event = threading.Event()
+
+# Directory to store chat history
+CHAT_HISTORY_DIR = "chat_history"
+if not os.path.exists(CHAT_HISTORY_DIR):
+    os.makedirs(CHAT_HISTORY_DIR)
+
+# Counter for the number of conversations today
+conversation_counter = 0
+
+
+def save_conversation_to_file(conversation_history):
+    """Saves the conversation history to a text file."""
+    global conversation_counter
+    now = datetime.datetime.now()
+    date_str = now.strftime("%Y%m%d")
+    time_str = now.strftime("%H%M%S")
+
+    # find how many file already exist in this day
+    file_count_today = 0
+    for filename in os.listdir(CHAT_HISTORY_DIR):
+        if filename.startswith(date_str):
+            file_count_today += 1
+
+    conversation_counter = file_count_today + 1
+    filename = f"{date_str}-{time_str}-conversation-{conversation_counter}.txt"
+    filepath = os.path.join(CHAT_HISTORY_DIR, filename)
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        for message in conversation_history:
+            role = message["role"]
+            content = message["content"]
+            f.write(f"{role}: {content}\n")
+            if role == 'assistant':
+                f.write("\n-----------------------------------------------------------------------------------------\n\n")
+    print(f"Conversation saved to {filepath}")
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -37,11 +80,13 @@ def before_request():
     if request.endpoint not in ('login', 'static') and not session.get('logged_in'):
         return redirect(url_for('login'))
 
+
 @app.route('/logout')
 def logout():
     """Handles the logout."""
     session.pop('logged_in', None)
     return redirect(url_for('login'))
+
 
 @app.route("/")
 def index():
@@ -60,6 +105,8 @@ def generate_chat_stream(model_name, messages):
     Yields:
         JSON-encoded strings representing each chunk of the assistant's response.
     """
+    global stream_active
+    global stream_stop_event
     url = "http://localhost:11434/api/chat"
     data = {
         "model": model_name,
@@ -70,23 +117,33 @@ def generate_chat_stream(model_name, messages):
 
     global MODEL_NAME
     global conversation_history
+    stream_active = True
+    stream_stop_event.clear()  # Reset the event
+
     try:
         import requests
         response = requests.post(url, data=json.dumps(data), headers=headers, stream=True)
         response.raise_for_status()
 
-        assistant_response = "" #store the assistant response in all
+        assistant_response = ""  # store the assistant response in all
+        conversation_history.append(
+            {"role": "assistant", "content": assistant_response})  # add all response to history
         for line in response.iter_lines():
+            if stream_stop_event.is_set():
+                print("Stream stopped by user.")
+                yield f"data: {json.dumps({'end': True})}\n\n"
+                return
             if line:
                 decoded_line = line.decode("utf-8")
                 json_data = json.loads(decoded_line) if decoded_line.startswith('{') else {}
                 text_chunk = json_data.get("message", {}).get("content", "")
-                assistant_response += text_chunk # add the text_chunk to all response
+                assistant_response += text_chunk  # add the text_chunk to all response
+                conversation_history[-1]['content'] = assistant_response
                 sys.stdout.write(text_chunk)
                 sys.stdout.flush()
                 yield f"data: {json.dumps({'response': text_chunk})}\n\n"
                 if json_data.get('done', False):
-                    conversation_history.append({"role": "assistant", "content": assistant_response}) # add all response to history
+                    yield f"data: {json.dumps({'end': True})}\n\n"
                     break
 
     except requests.exceptions.RequestException as e:
@@ -95,6 +152,10 @@ def generate_chat_stream(model_name, messages):
         yield f"data: {json.dumps({'error': f'JSON decode error: {e}', 'end': True})}\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'error': f'An error occurred: {e}', 'end': True})}\n\n"
+    finally:
+        stream_active = False
+        stream_stop_event.clear()
+
 
 @app.route("/select_model", methods=["POST"])
 def select_model():
@@ -114,6 +175,7 @@ def select_model():
         print(f"Error in /select_model: {e}")
         return jsonify({"error": "An error occurred"}), 500
 
+
 @app.route("/chat", methods=["POST"])
 def chat():
     """Handles chat messages and returns the assistant's response."""
@@ -125,15 +187,30 @@ def chat():
         user_prompt = data.get("message")
         print_user_message(user_prompt)
         conversation_history.append({"role": "user", "content": user_prompt})
+
         def generate():
             for chunk in generate_chat_stream(MODEL_NAME, conversation_history):
-               yield chunk
+                yield chunk
+            yield "data: {}\n\n"
 
         return Response(generate(), mimetype="text/event-stream")
 
     except Exception as e:
         print(f"Error in /chat: {e}")
         return jsonify({"error": "An error occurred"}), 500
+
+
+@app.route("/stop", methods=["POST"])
+def stop_generate():
+    """Stops the stream generation."""
+    global stream_active
+    global stream_stop_event
+    if stream_active:
+        stream_stop_event.set()
+        return jsonify({"message": "Stream stopping"}), 200
+    else:
+        return jsonify({"message": "No stream active"}), 200
+
 
 @app.route("/models", methods=["GET"])
 def get_models():
@@ -161,9 +238,19 @@ def get_models():
 def reset_chat():
     """Resets the conversation history."""
     global conversation_history
+
+    if conversation_history:
+        save_conversation_to_file(conversation_history)
+
     conversation_history = []
     return jsonify({"message": "Chat history reset."})
 
+
+@app.route("/history", methods=["GET"])
+def get_history():
+    """Return the current conversation history."""
+    global conversation_history
+    return jsonify(conversation_history)
 
 
 if __name__ == "__main__":

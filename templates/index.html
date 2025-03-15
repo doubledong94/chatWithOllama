@@ -151,7 +151,8 @@
             </div>
             <div class="input-area">
                 <input type="text" id="message" placeholder="Enter your message" >
-                <button onclick="sendMessage()">Send</button>
+                <button id="clear-button" onclick="resetChat()" style="display:block;">Clear</button>
+                <button id="stop-button" onclick="stopStream()" style="display:none;">Stop</button>
             </div>
         </div>
     </div>
@@ -200,6 +201,7 @@
         const chatbox = document.getElementById('chatbox');
         const messageInput = document.getElementById('message');
         let lastRole = null; // Keep track of the last role
+        let isStreamActive = false;
         let lastMessageDiv = null; // Keep track of the last message div
 
         function appendMessage(role, content) {
@@ -233,6 +235,8 @@
                 messageInput.value = '';
                 sendMessageToBackend(message);
         }
+        const stopButton = document.getElementById('stop-button');
+        const clearButton = document.getElementById('clear-button');
         function sendMessageToBackend(message){
             fetch('/chat', {
                     method: 'POST',
@@ -249,6 +253,9 @@
                     return response.body;
                 })
                 .then(body=>{
+                    isStreamActive = true;
+                    stopButton.style.display = 'block';
+                    clearButton.style.display = 'none';
                     const reader = body.getReader();
                     const decoder = new TextDecoder();
                     let responseText = "";
@@ -256,45 +263,57 @@
                     appendMessage('assistant',"")
                     function read() {
                         reader.read().then(({ done, value }) => {
-                        if (done) {
-                            console.log("Stream complete");
-                            return;
-                        }
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n');
-                        for(let i=0; i<lines.length; i++){
-                            if(lines[i]){
-                                if(lines[i].startsWith("data: ")){
+                            if (done) {
+                                console.log("Stream complete");
+                                return;
+                            }
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+                            for(let i=0; i<lines.length; i++){
+                                if(lines[i]){
+                                    if(lines[i].startsWith("data: ")){
 
-                                    const data = JSON.parse(lines[i].substring(5));
-                                    if(data.response){
-                                        responseText += data.response;
-                                    }else if(data.end){
-                                        // do nothing
+                                        const data = JSON.parse(lines[i].substring(5));
+                                        if(data.response){
+                                            responseText += data.response;
+                                        }else if(data.end){
+                                            // hide the stop button
+                                            stopButton.style.display = 'none';
+                                            clearButton.style.display = 'block';
+                                            //set isStreamActive
+                                            isStreamActive = false;
+                                            // do nothing
+                                        }
+                                    }
+                                }
+
+                                // if have last message div and the role is assistant, modify last div
+                                if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
+                                    lastMessageDiv.innerHTML = responseText;
+                                    MathJax.typesetPromise([lastMessageDiv]);
+                                    lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                                    // only scroll to bottom when the distance to bottom less than 200px
+                                    if (chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 200) {
+                                        chatbox.scrollTop = chatbox.scrollHeight;
                                     }
                                 }
                             }
-
-                            // if have last message div and the role is assistant, modify last div
-                            if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
-                                lastMessageDiv.innerHTML = responseText;
-                                MathJax.typesetPromise([lastMessageDiv]);
-                                lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
-                                chatbox.scrollTop = chatbox.scrollHeight;
-                            }
-                        }
-                        read();
+                            read();
                         })
                     }
                     read();
                 })
                  .catch(error => {
                     console.error('Fetch error:', error);
+                    stopButton.style.display = 'none';
+                    clearButton.style.display = 'block';
+                    isStreamActive = false;
                     appendMessage('assistant', 'Error: fetch error');
                 });
         }
 
          function resetChat() {
+            stopStream();
             fetch('/reset', {
                 method: 'POST',
                 headers: {
@@ -309,9 +328,37 @@
             })
             .catch(error => console.error('Error:', error));
         }
+
+        //load the conversation info
+        function loadConversation() {
+            chatbox.innerHTML = '' //clear the chatbox
+            fetch('/history', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(conversation=>{
+                conversation.forEach(item => {
+                    appendMessage(item.role, item.content);
+                    if(item.role === 'assistant') {
+                        lastMessageDiv.innerHTML = item.content;
+                        MathJax.typesetPromise([lastMessageDiv]);
+                        lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                    }
+                });
+            })
+            .catch(error => console.error('Error:', error));
+        }
         //reset chat when web page reload
         window.onload = function() {
-            resetChat();
+            loadConversation();
             fetchModels();
         };
 
@@ -330,6 +377,28 @@
             })
             .catch(error => console.error('Error sending model to server:', error));
         }
+
+        function stopStream() {
+            if (isStreamActive) {
+              fetch('/stop', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              })
+              .then(response => {
+                if (response.ok) {
+                  console.log('Stream stop request sent successfully.');
+                  stopButton.style.display = 'none';
+                  clearButton.style.display = 'block';
+                  isStreamActive = false;
+                } else {
+                  console.error('Failed to send stop request.');
+                }
+              })
+              .catch(error => console.error('Error stopping stream:', error));
+            }
+          }
 
         // Select model function
          function selectModel(model) {
