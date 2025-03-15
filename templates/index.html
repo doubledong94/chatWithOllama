@@ -158,13 +158,8 @@
     </div>
 
     <script>
-        //default model_name
-        let currentModel = localStorage.getItem("currentModel") || "qwq:32b";
-
-        // Save the current model to localStorage
-        function saveCurrentModel(model) {
-            localStorage.setItem("currentModel", model);
-        }
+        // default model_name, will get from server
+        let currentModel = null;
 
         //default markdown state
         let enableMarkdown = false;
@@ -189,11 +184,21 @@
                         li.onclick = function() {
                             selectModel(model);
                         };
-                        if (model === currentModel) {
-                            li.classList.add('selected');
-                        }
                         modelList.appendChild(li);
                     });
+
+                    // get the current model info from server
+                    fetch('/current_model', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    }).then(response => response.json())
+                        .then(data => {
+                            currentModel = data.current_model;
+                            resetStyleOfModelList();
+                        })
+                        .catch(error => console.error('Error fetching current model:', error));
                 })
                 .catch(error => console.error('Error fetching models:', error));
         }
@@ -289,13 +294,11 @@
 
                                 // if have last message div and the role is assistant, modify last div
                                 if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
-                                    lastMessageDiv.innerHTML = responseText;
-                                    MathJax.typesetPromise([lastMessageDiv]);
-                                    lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
-                                    // only scroll to bottom when the distance to bottom less than 200px
-                                    if (chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 200) {
-                                        chatbox.scrollTop = chatbox.scrollHeight;
-                                    }
+                                    lastMessageDiv.textContent = responseText;
+                                    MathJax.typesetPromise([lastMessageDiv]).then(() => {
+                                        lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                                        scrollToBottom();
+                                    });
                                 }
                             }
                             read();
@@ -310,6 +313,13 @@
                     isStreamActive = false;
                     appendMessage('assistant', 'Error: fetch error');
                 });
+        }
+
+        //helper function to scroll to bottom
+        function scrollToBottom(){
+            if (chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 50) {
+                chatbox.scrollTop = chatbox.scrollHeight;
+            }
         }
 
          function resetChat() {
@@ -348,9 +358,11 @@
                 conversation.forEach(item => {
                     appendMessage(item.role, item.content);
                     if(item.role === 'assistant') {
-                        lastMessageDiv.innerHTML = item.content;
-                        MathJax.typesetPromise([lastMessageDiv]);
-                        lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                        lastMessageDiv.textContent = item.content;
+                        MathJax.typesetPromise([lastMessageDiv]).then(() => {
+                            lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                            scrollToBottom();
+                        });
                     }
                 });
             })
@@ -400,12 +412,7 @@
             }
           }
 
-        // Select model function
-         function selectModel(model) {
-            currentModel = model;
-            saveCurrentModel(model);
-            sendModelToServer(model);
-
+        function resetStyleOfModelList(){
             //remove the style of the last select model
             const listItems = document.querySelectorAll('#model-list li');
             listItems.forEach(item => {
@@ -413,15 +420,15 @@
             });
 
             // add the selected style to the current select model
-            const selectedItem = document.querySelector(`#model-list li:nth-child(${Array.from(listItems).findIndex(item => item.textContent === model)+1})`);
+            const selectedItem = document.querySelector(`#model-list li:nth-child(${Array.from(listItems).findIndex(item => item.textContent === currentModel)+1})`);
             selectedItem.classList.add('selected');
+        }
 
-            //add message to chatbox to show which model you select
-            const messageDiv = document.createElement('div');
-            messageDiv.classList.add('message');
-            messageDiv.innerHTML = `Now you select model: <strong>${model}</strong>`;
-            chatbox.appendChild(messageDiv);
-
+        // Select model function
+         function selectModel(model) {
+            currentModel = model;
+            sendModelToServer(model);
+            resetStyleOfModelList();
             resetChat();
         }
 

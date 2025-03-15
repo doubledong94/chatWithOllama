@@ -253,5 +253,12 @@ def get_history():
     return jsonify(conversation_history)
 
 
+@app.route("/current_model", methods=["GET"])
+def get_current_model():
+    """Return the current select model"""
+    global MODEL_NAME
+    return jsonify({"current_model": MODEL_NAME})
+
+
 if __name__ == "__main__":
     app.run(debug=True)
