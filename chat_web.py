@@ -29,26 +29,30 @@ CHAT_HISTORY_DIR = "chat_history"
 if not os.path.exists(CHAT_HISTORY_DIR):
     os.makedirs(CHAT_HISTORY_DIR)
 
+# Global variable to store the filepath of the loaded history
+loaded_history_filepath = None
+
 # Counter for the number of conversations today
 conversation_counter = 0
 
 
-def save_conversation_to_file(conversation_history):
+def save_conversation_to_file(conversation_history, filepath=None):
     """Saves the conversation history to a text file."""
     global conversation_counter
-    now = datetime.datetime.now()
-    date_str = now.strftime("%Y%m%d")
-    time_str = now.strftime("%H%M%S")
+    if filepath is None:
+        now = datetime.datetime.now()
+        date_str = now.strftime("%Y%m%d")
+        time_str = now.strftime("%H%M%S")
 
-    # find how many file already exist in this day
-    file_count_today = 0
-    for filename in os.listdir(CHAT_HISTORY_DIR):
-        if filename.startswith(date_str):
-            file_count_today += 1
+        # find how many file already exist in this day
+        file_count_today = 0
+        for filename in os.listdir(CHAT_HISTORY_DIR):
+            if filename.startswith(date_str):
+                file_count_today += 1
 
-    conversation_counter = file_count_today + 1
-    filename = f"{date_str}-{time_str}-conversation-{conversation_counter}.txt"
-    filepath = os.path.join(CHAT_HISTORY_DIR, filename)
+        conversation_counter = file_count_today + 1
+        filename = f"{date_str}-{time_str}-conversation-{conversation_counter}.txt"
+        filepath = os.path.join(CHAT_HISTORY_DIR, filename)
 
     with open(filepath, "w", encoding="utf-8") as f:
         for message in conversation_history:
@@ -238,11 +242,14 @@ def get_models():
 def reset_chat():
     """Resets the conversation history."""
     global conversation_history
+    global loaded_history_filepath
 
     if conversation_history:
-        save_conversation_to_file(conversation_history)
+        save_conversation_to_file(conversation_history, loaded_history_filepath)
 
     conversation_history = []
+    # Reset the loaded filepath
+    loaded_history_filepath = None
     return jsonify({"message": "Chat history reset."})
 
 
@@ -273,6 +280,7 @@ def chat_history_list():
 def load_chat_history():
     """Loads a specific chat history file and updates the current conversation."""
     global conversation_history
+    global loaded_history_filepath
     try:
         data = request.get_json()
         filename = data.get("filename")
@@ -301,6 +309,8 @@ def load_chat_history():
 
                 else:
                     i += 1
+        # Store the filepath after loading
+        loaded_history_filepath = filepath
         return jsonify({"message": "Chat history loaded", "history": conversation_history})
 
     except Exception as e:
