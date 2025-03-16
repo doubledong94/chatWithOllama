@@ -259,7 +259,12 @@
 
             //append to chatbox
             chatbox.appendChild(messageDiv);
-            chatbox.scrollTop = chatbox.scrollHeight; // Scroll to bottom
+            if(role === 'assistant') {
+                MathJax.typesetPromise([contentSpan]).then(() => {
+                    contentSpan.innerHTML = marked.parse(contentSpan.innerHTML);
+                    scrollToBottom();
+                });
+            }
         }
 
         function sendMessage() {
@@ -386,13 +391,6 @@
             .then(conversation=>{
                 conversation.forEach(item => {
                     appendMessage(item.role, item.content);
-                    if(item.role === 'assistant') {
-                        lastMessageDiv.textContent = item.content;
-                        MathJax.typesetPromise([lastMessageDiv]).then(() => {
-                            lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
-                            scrollToBottom();
-                        });
-                    }
                 });
             })
             .catch(error => console.error('Error:', error));
@@ -448,11 +446,6 @@
                  lastMessageDiv = null;
                  data.history.forEach(item=>{
                      appendMessage(item.role,item.content);
-                     if(item.role === 'assistant') {
-                        MathJax.typesetPromise([lastMessageDiv]).then(() => {
-                            lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
-                        });
-                     }
                  });
              })
              .catch(error => console.error('Error:', error));
