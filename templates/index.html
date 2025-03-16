@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <meta charset="UTF-8">
     <title>Chat with Ollama</title>
     <style>
@@ -73,9 +72,6 @@
             display: inline-block;
             min-width: 80px; /* Adjust as needed */
         }
-        think {
-            color: gray;
-        }
 
         /* Style for the input area */
         .input-area {
@@ -144,17 +140,13 @@
 
 
     </style>
-    <script>
-        MathJax = {
-          tex: {
-            inlineMath: [['$', '$'], ['\\(', '\\)']]
-          },
-          svg: {
-            fontCache: 'global'
-          }
-        };
-        </script>
+    <!-- highlight.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- MathJax -->
     <script type="text/javascript" id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+    <!-- marked -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="main-container">
@@ -180,9 +172,6 @@
         </div>
     </div>
 
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>hljs.highlightAll();</script>
     <script>
         // default model_name, will get from server
         let currentModel = null;
@@ -241,6 +230,23 @@
         let isStreamActive = false;
         let lastMessageDiv = null; // Keep track of the last message div
 
+        function setInnerHtml(role, content, contentSpan) {
+            if(role === 'assistant') {
+                contentSpan.innerHTML = marked.parse(content
+                    .replace(/\\\[/g, '\\\\[')
+                    .replace(/\\\]/g, '\\\\]')
+                    .replace(/\\\)/g, '\\\\)')
+                    .replace(/\\\(/g, '\\\\(')
+                    );
+                contentSpan.querySelectorAll('pre code').forEach(el => {
+                  hljs.highlightElement(el);
+                });
+                MathJax.typeset();
+            } else {
+                contentSpan.innerHTML = content;
+            }
+        }
+
         function appendMessage(role, content) {
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message');
@@ -254,24 +260,15 @@
             lastRole = role;
             const contentSpan = document.createElement('span');
             // Use innerHTML here if you are expecting any HTML in the content
-            contentSpan.textContent = content;
             messageDiv.appendChild(contentSpan);
 
             //store the last div
             lastMessageDiv = contentSpan;
 
-            scrollToBottom(true);
             //append to chatbox
             chatbox.appendChild(messageDiv);
-            if(role === 'assistant') {
-                MathJax.typesetPromise([contentSpan]).then(() => {
-                    contentSpan.innerHTML = marked.parse(contentSpan.innerHTML);
-                    contentSpan.querySelectorAll('pre code').forEach(el => {
-                      hljs.highlightElement(el);
-                    });
-                    scrollToBottom();
-                });
-            }
+            setInnerHtml(role, content, contentSpan);
+            scrollToBottom(true);
         }
 
         function sendMessage() {
@@ -335,14 +332,8 @@
 
                                 // if have last message div and the role is assistant, modify last div
                                 if (lastMessageDiv && lastMessageDiv.parentNode.classList.contains('assistant')) {
-                                    lastMessageDiv.textContent = responseText;
-                                    MathJax.typesetPromise([lastMessageDiv]).then(() => {
-                                        lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
-                                        lastMessageDiv.querySelectorAll('pre code').forEach(el => {
-                                          hljs.highlightElement(el);
-                                        });
-                                        scrollToBottom();
-                                    });
+                                    setInnerHtml('assistant', responseText, lastMessageDiv);
+                                    scrollToBottom();
                                 }
                             }
                             read();
