@@ -244,6 +244,7 @@ def reset_chat():
     global conversation_history
     global loaded_history_filepath
 
+    stop_generate()
     if conversation_history:
         save_conversation_to_file(conversation_history, loaded_history_filepath)
 
@@ -282,6 +283,9 @@ def load_chat_history():
     global conversation_history
     global loaded_history_filepath
     try:
+        stop_generate()
+        if conversation_history:
+            save_conversation_to_file(conversation_history, loaded_history_filepath)
         data = request.get_json()
         filename = data.get("filename")
         filepath = os.path.join(CHAT_HISTORY_DIR, filename)

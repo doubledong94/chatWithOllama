@@ -180,6 +180,9 @@
         </div>
     </div>
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
     <script>
         // default model_name, will get from server
         let currentModel = null;
@@ -257,11 +260,15 @@
             //store the last div
             lastMessageDiv = contentSpan;
 
+            scrollToBottom(true);
             //append to chatbox
             chatbox.appendChild(messageDiv);
             if(role === 'assistant') {
                 MathJax.typesetPromise([contentSpan]).then(() => {
                     contentSpan.innerHTML = marked.parse(contentSpan.innerHTML);
+                    contentSpan.querySelectorAll('pre code').forEach(el => {
+                      hljs.highlightElement(el);
+                    });
                     scrollToBottom();
                 });
             }
@@ -331,6 +338,9 @@
                                     lastMessageDiv.textContent = responseText;
                                     MathJax.typesetPromise([lastMessageDiv]).then(() => {
                                         lastMessageDiv.innerHTML = marked.parse(lastMessageDiv.innerHTML);
+                                        lastMessageDiv.querySelectorAll('pre code').forEach(el => {
+                                          hljs.highlightElement(el);
+                                        });
                                         scrollToBottom();
                                     });
                                 }
@@ -350,14 +360,13 @@
         }
 
         //helper function to scroll to bottom
-        function scrollToBottom(){
-            if (chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 50) {
+        function scrollToBottom(force = false) {
+            if (force || chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 50) {
                 chatbox.scrollTop = chatbox.scrollHeight;
             }
         }
 
          function resetChat() {
-            stopStream();
             fetch('/reset', {
                 method: 'POST',
                 headers: {
