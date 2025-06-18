@@ -352,7 +352,7 @@
 
         //helper function to scroll to bottom
         function scrollToBottom(force = false) {
-            if (force || chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 50) {
+            if (force || chatbox.scrollHeight - chatbox.scrollTop - chatbox.clientHeight < 100) {
                 chatbox.scrollTop = chatbox.scrollHeight;
             }
         }
