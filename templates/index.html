@@ -15,7 +15,7 @@
         .main-container {
             display: flex;
             width: 95%;
-            max-width: 1200px; /* Increase max-width for better layout */
+            max-width: 4800px; /* Increase max-width for better layout */
             margin: 20px auto; /* Center the main container */
             flex-grow:1;
         }
@@ -42,7 +42,7 @@
         #history-list-container{
             width:100%;
             height:auto;
-            max-height:400px;
+            max-height:200px;
             overflow-y: auto;
             border:1px solid #ccc;
             margin-bottom:10px;
@@ -233,10 +233,7 @@
         function setInnerHtml(role, content, contentSpan) {
             if(role === 'assistant') {
                 contentSpan.innerHTML = marked.parse(content
-                    .replace(/\\\[/g, '\\\\[')
-                    .replace(/\\\]/g, '\\\\]')
-                    .replace(/\\\)/g, '\\\\)')
-                    .replace(/\\\(/g, '\\\\(')
+                    .replace(/\\/g, '\\\\')
                     );
                 contentSpan.querySelectorAll('pre code').forEach(el => {
                   hljs.highlightElement(el);
