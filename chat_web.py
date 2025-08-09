@@ -13,6 +13,9 @@ warnings.filterwarnings("ignore", category=UserWarning)
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Change this to a strong random key
 
+# system prompts
+SYSTEM_PROMPT = open("prompts/prompt_reference_resolution.md", "r", encoding="utf-8").read().strip()
+
 # Global variable to store conversation history
 conversation_history = []
 MODEL_NAME = "qwq:32b"  # Default model name, you can change it here
@@ -249,6 +252,8 @@ def reset_chat():
         save_conversation_to_file(conversation_history, loaded_history_filepath)
 
     conversation_history = []
+    if len(SYSTEM_PROMPT) > 0:
+        conversation_history.append({"role": "system", "content": SYSTEM_PROMPT})  # Reset system prompt
     # Reset the loaded filepath
     loaded_history_filepath = None
     return jsonify({"message": "Chat history reset."})
@@ -310,7 +315,10 @@ def load_chat_history():
                         i += 1
                     conversation_history.append({"role": "assistant", "content": content[11:].strip()})
                     i += 2  # Skip separator and empty lines
-
+                elif line.startswith("system: "):
+                    content = line[8:]
+                    conversation_history.append({"role": "system", "content": content.strip()})
+                    i += 1
                 else:
                     i += 1
         # Store the filepath after loading
